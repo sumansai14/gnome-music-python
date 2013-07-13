@@ -1,0 +1,2 @@
+class AlbumArtCache:
+    pass

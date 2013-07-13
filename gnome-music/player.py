@@ -1,6 +1,16 @@
-from gi.repository import Gtk, Gst, GLib
+from gi.repository import Gtk, Gst, GstAudio, GstPbutils, Gio, GLib, MediaPlayer2PlayerIface, Grl, Gdk
+from albumArt import AlbumArtCache
+from random import randint
+import settings
+
 
 ART_SIZE = 34
+
+class RepeatType:
+    NONE = 0
+    SONG = 1
+    ALL = 2
+    SHUFFLE = 3
 
 class Player():
     def __init__(self):
@@ -30,7 +40,7 @@ class Player():
         self.bus.connect("message::error", self._onBusError)
         self.bus.connect("message::eos", self._onBusEos)
 
-        if(nextTrack):
+        if self._getNextTrack():
             GLib.idle_add(GLib.PRIORITY_HIGH, self._onGLibIdle) 
         elif (self.repeat == RepeatType.NONE):
             self.stop()
@@ -68,8 +78,8 @@ class Player():
             uri = media.get_url()
         else:
             uri = "none"
-            log("URI:" + uri)
-            log("Error:" + message.parse_error())
+            print("URI:" + uri)
+            print("Error:" + message.parse_error())
             self.stop()
             return True
 
@@ -77,7 +87,7 @@ class Player():
         nextTrack = self._getNextTrack()
 
     def _onGLibIdle(self):
-        self.currentTrack = nextTrack
+        self.currentTrack = self._getNextTrack()
         self.play()
 
 
@@ -96,13 +106,13 @@ class Player():
         elif self.repeat == RepeatType.SHUFFLE:
             nextTrack = self.playlist.get_iter_first()[1]
             rows = self.playlist.iter_n_children(None)
-            random = Math.floor(Math.random() * rows)
+            random = randint(0, rows)
             for i in random:
                 self.playlist.iter_next(nextTrack)
 
         return nextTrack
 
-    def _getIterLast():
+    def _getIterLast(self):
         ok, iter = self.playlist.get_iter_first()
         last = None
 
@@ -128,7 +138,7 @@ class Player():
         elif self.repeat == RepeatType.SHUFFLE:
             previousTrack = self.playlist.get_iter_first()[1]
             rows = self.playlist.iter_n_children(None)
-            random = Math.floor(Math.random() * rows)
+            random = randint(0, rows)
             for i in random:
                 self.playlist.iter_next(previousTrack)
 
@@ -190,13 +200,13 @@ class Player():
     def load(self, media):
         self._setDuration(media.get_duration())
         self.songTotalTimeLabel.label = self.secondsToString(media.get_duration())
-        self.progressScale.sensitive = true
+        self.progressScale.sensitive = True
 
         self.playBtn.sensitive = True
         self._syncPrevNext()
 
         self.coverImg.set_from_pixbuf(self._symbolicIcon)
-        self.cache.lookup(ART_SIZE, media.get_artist(), media.get_string(Grl.METADATA_KEY_ALBUM), _onCacheLookup)
+        self.cache.lookup(ART_SIZE, media.get_artist(), media.get_string(Grl.METADATA_KEY_ALBUM), self._onCacheLookup)
 
         if media.get_title() != None:
             self.titleLabel.set_label(media.get_title())
@@ -227,8 +237,8 @@ class Player():
             self.player.nextUrl = None
 
         self._dbusImpl.emit_property_changed('Metadata', GLib.Variant.new('a{sv}', self.Metadata))
-        self._dbusImpl.emit_property_changed('CanPlay', GLib.Variant.new('b', true))
-        self._dbusImpl.emit_property_changed('CanPause', GLib.Variant.new('b', true))
+        self._dbusImpl.emit_property_changed('CanPlay', GLib.Variant.new('b', True))
+        self._dbusImpl.emit_property_changed('CanPause', GLib.Variant.new('b', True))
 
         self.emit("playlist-item-changed", self.playlist, self.currentTrack)
         self.emit('current-changed')
@@ -342,7 +352,7 @@ class Player():
         self.prevBtn.connect("clicked", self._onPrevBtnClicked())
         self.playBtn.connect("clicked", self._onPlayBtnClicked())
         self.nextBtn.connect("clicked", self._onNextBtnClicked())
-        self.progressScale.connect("button-press-event", _onProgrssScaleEvent)
+        self.progressScale.connect("button-press-event", self._onProgrssScaleEvent)
         self.progressScale.connect("value-changed", self._onProgressValueChanged())
         self.progressScale.connect("button-release-event", self._onProgressScaleButtonReleased())
 
@@ -350,11 +360,11 @@ class Player():
         self.onProgressScaleChangeValue(self.progressScale)
         self._updatePositionCallback()
         self.player.set_state(self._lastState)
-        self.timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, Lang.bind(self, self._updatePositionCallback))
+        self.timeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, self._updatePositionCallback)
         return False
 
     def _onProgressValueChanged(self):
-        seconds = Math.floor(self.progressScale.get_value() / 60)
+        seconds = int(self.progressScale.get_value() / 60)
         self.songPlaybackTimeLabel.set_label(self.secondsToString(seconds))
         return False
 
@@ -367,7 +377,7 @@ class Player():
         return False
 
     def secondsToString(self, duration):
-        minutes = parseInt( duration / 60 ) % 60
+        minutes = int( duration / 60 ) % 60
         seconds = duration % 60
 
         if(seconds  < 10):
@@ -448,7 +458,7 @@ class Player():
 
     def Stop(self):
         self.progressScale.set_value(0)
-        self.progressScale.sensitive = false
+        self.progressScale.sensitive = False
         self.playBtn.set_image(self._playImage)
         self.stop()
 
@@ -508,7 +518,7 @@ class Player():
         else:
             return 'Playlist'
 
-    def setLoopStatus(mode):
+    def setLoopStatus(self, mode):
         if mode == 'None':
             self.repeat = RepeatType.NONE
         elif mode == 'Track':
@@ -533,7 +543,7 @@ class Player():
             self.repeat = RepeatType.NONE
         self._syncRepeatImage()
 
-    def getMetadata():
+    def getMetadata(self):
         if self.currentTrack == None:
             return
 
@@ -614,4 +624,4 @@ class SelectionToolbar():
             self._ui.add_from_resource('/org/gnome/music/SelectionToolbar.ui')
             self.eventbox = self._ui.get_object("eventbox1")
             self._add_to_playlist_button = self._ui.get_object("button1")
-            self.eventbox.set_visible(false)
+            self.eventbox.set_visible(False)
