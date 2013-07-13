@@ -1,4 +1,3 @@
-import os
 import sys
 from gi.repository import Gtk, Gio, GLib
 
