@@ -17,7 +17,7 @@ class Application(Gtk.Application):
         Gtk.Application.startup(self)
 
     def do_activate(self):
-        if self._window is not None:
+        if(self._window == null):
             self._window = Window(self)
         self._window.present()
 
